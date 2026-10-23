@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample midPoint resource for the ManageEngine ServiceDesk Plus connector.
+
+  Accounts are provisioned FROM midPoint (HR is the authoritative source). ServiceDesk Plus is a target only:
+  no reaction is defined for the "unmatched" situation, so accounts found in ServiceDesk Plus that do not
+  belong to any midPoint user are reported but never imported as new users.
+
+  Before importing:
+    1. Deploy connector-servicedeskplus-1.1.1.jar into $MIDPOINT_HOME/icf-connectors, with no other version of it.
+    2. Replace baseUrl and CHANGE_ME_API_TOKEN (midPoint encrypts clearValue on import).
+    3. The xmlns:cfg namespace contains the connector bundle name (ConnectorBundle-Name in pom.xml). Check it
+       against the "namespace" of the connector object in midPoint.
+-->
+<resource xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+          xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+          xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
+          xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3"
+          xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+          xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+          xmlns:t="http://prism.evolveum.com/xml/ns/public/types-3"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          oid="bbe17a28-1c99-4378-ba25-160a3b623bcd">
+
+    <name>ManageEngine ServiceDesk Plus</name>
+
+    <connectorRef type="c:ConnectorType">
+        <filter>
+            <q:and>
+                <q:equal>
+                    <q:path>c:connectorType</q:path>
+                    <q:value>com.rakkau.midpoint.servicedeskplus.ServiceDeskPlusConnector</q:value>
+                </q:equal>
+                <q:equal>
+                    <q:path>c:connectorVersion</q:path>
+                    <q:value>1.1.1</q:value>
+                </q:equal>
+            </q:and>
+        </filter>
+    </connectorRef>
+
+    <connectorConfiguration xsi:type="c:ConnectorConfigurationType">
+        <icfc:configurationProperties
+                xmlns:cfg="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/com.rakkau.midpoint.servicedeskplus/com.rakkau.midpoint.servicedeskplus.ServiceDeskPlusConnector">
+            <cfg:baseUrl>https://sdp.example.com:8080</cfg:baseUrl>
+            <cfg:authToken>
+                <t:clearValue>CHANGE_ME_API_TOKEN</t:clearValue>
+            </cfg:authToken>
+            <cfg:pageSize>100</cfg:pageSize>
+            <cfg:timeoutSeconds>30</cfg:timeoutSeconds>
+            <!-- Keep false. Import the CA certificate into the JVM trust store instead. -->
+            <cfg:trustAllCertificates>false</cfg:trustAllCertificates>
+        </icfc:configurationProperties>
+    </connectorConfiguration>
+
+    <schemaHandling>
+        <objectType>
+            <kind>account</kind>
+            <intent>default</intent>
+            <displayName>Default Account</displayName>
+            <default>true</default>
+            <delineation>
+                <objectClass>ri:AccountObjectClass</objectClass>
+            </delineation>
+            <focus>
+                <type>c:UserType</type>
+            </focus>
+
+            <!-- __NAME__ = SDP "name" (display name). It is the only field ServiceDesk Plus requires for every
+                 user, so it is the only one that can safely be the ConnId name. Built here as "givenName familyName";
+                 use fullName instead if your user template always computes it. -->
+            <attribute>
+                <ref>icfs:name</ref>
+                <outbound>
+                    <source>
+                        <path>givenName</path>
+                    </source>
+                    <source>
+                        <path>familyName</path>
+                    </source>
+                    <expression>
+                        <script>
+                            <code>(basic.stringify(givenName) + ' ' + basic.stringify(familyName)).trim()</code>
+                        </script>
+                    </expression>
+                </outbound>
+            </attribute>
+
+            <!-- E-mail is optional in ServiceDesk Plus: empty values are simply not sent. -->
+            <attribute>
+                <ref>ri:email</ref>
+                <outbound>
+                    <source>
+                        <path>emailAddress</path>
+                    </source>
+                </outbound>
+                <!-- Pre-mapping used by the correlator below; weak: never overwrites an existing midPoint value -->
+                <inbound>
+                    <strength>weak</strength>
+                    <target>
+                        <path>emailAddress</path>
+                    </target>
+                </inbound>
+            </attribute>
+
+            <attribute>
+                <ref>ri:firstName</ref>
+                <outbound>
+                    <source>
+                        <path>givenName</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <attribute>
+                <ref>ri:lastName</ref>
+                <outbound>
+                    <source>
+                        <path>familyName</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <attribute>
+                <ref>ri:phone</ref>
+                <outbound>
+                    <source>
+                        <path>telephoneNumber</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <attribute>
+                <ref>ri:employeeId</ref>
+                <outbound>
+                    <source>
+                        <path>employeeNumber</path>
+                    </source>
+                </outbound>
+            </attribute>
+
+            <!-- Optional. The department must already exist in ServiceDesk Plus.
+            <attribute>
+                <ref>ri:department</ref>
+                <outbound>
+                    <source>
+                        <path>organizationalUnit</path>
+                    </source>
+                </outbound>
+            </attribute>
+            -->
+
+            <!-- Link existing ServiceDesk Plus accounts to midPoint users by e-mail address. Accounts that have no e-mail in
+                 ServiceDesk Plus cannot be correlated this way and stay "unmatched" (no action is taken on them). -->
+            <correlation>
+                <correlators>
+                    <items>
+                        <name>email</name>
+                        <item>
+                            <ref>emailAddress</ref>
+                        </item>
+                    </items>
+                </correlators>
+            </correlation>
+
+            <synchronization>
+                <reaction>
+                    <name>linked</name>
+                    <situation>linked</situation>
+                    <actions>
+                        <synchronize/>
+                    </actions>
+                </reaction>
+                <reaction>
+                    <name>unlinked</name>
+                    <situation>unlinked</situation>
+                    <actions>
+                        <link/>
+                    </actions>
+                </reaction>
+                <reaction>
+                    <name>deleted</name>
+                    <situation>deleted</situation>
+                    <actions>
+                        <unlink/>
+                    </actions>
+                </reaction>
+                <!-- "unmatched" is intentionally not defined: users are created from the HR source only. -->
+            </synchronization>
+        </objectType>
+    </schemaHandling>
+</resource>
