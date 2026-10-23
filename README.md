@@ -7,6 +7,10 @@ A [ConnId](https://docs.evolveum.com/connectors/connid/1.x/) connector that allo
 midPoint can create, read, update and delete SDP users (requesters and technicians) and reconcile them with
 midPoint users. The connector is designed for on-premise installations that authenticate with a technician API key.
 
+## Status: Beta
+
+This connector has been successfully tested in a local/staging environment, covering the full identity lifecycle (Create, Read, Update, Delete) against ServiceDesk Plus API v3. However, it has not yet been deployed in a large-scale production environment. Community testing, feedback, and contributions are highly welcome.
+
 ## Contents
 
 - [Compatibility](#compatibility)
